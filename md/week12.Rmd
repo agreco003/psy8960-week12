@@ -10,7 +10,6 @@ Dataset Creation - Commented out as instructed
 #library(tidyverse)
 #library(RedditExtractoR)
 ```
-
 ```{r Data Import and Cleaning, include=TRUE}
 # io_links <- find_thread_urls(
 #   subreddit = "IOPsychology", 
@@ -29,8 +28,33 @@ Natural Language Processing (NLP)
 ```{r Script Settings and Resources, include=TRUE}
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 library(tidyverse)
+library(tm)
+library(qdap) #had to install JavaScript to work properly
+library(textstem)
 ```
 
 ```{r Data Import and Cleaning, include=TRUE}
 week12_tbl <- read_csv(file = "../data/week12.csv")
+io_corpus_original <- VCorpus(VectorSource(week12_tbl$title))
+io_corpus <- io_corpus_original %>% 
+  tm_map(content_transformer(replace_abbreviation)) %>% #included steps below to homogenize word forms
+  tm_map(content_transformer(replace_contraction)) %>% 
+  tm_map(content_transformer(str_to_lower)) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(removeNumbers) %>% 
+  tm_map(removeWords, c(stopwords("en"), 
+                        "io", "io psychology", "iopsychology",  "riopsychology", "io psych", "iopsych",
+                        "industrial organizational psychology", "industrial organisational psychology",
+                        "industrial organizational psych", "industrial organisational psych"
+  )) %>% #removed variations of I/O psychology. Punctuation already removed previously so not needed here
+  tm_map(stripWhitespace) %>%
+  lemmatize_words() %>% #used a dictionary to further homogenize word forms
+  tm_map(content_transformer(rm_white_lead)) #found the occasional leading whitespace in cleaned corpus examples annoying
+
+compare_them <- function(x, y) { 
+  index <- sample(1:length(x),1)
+  print(x[[index]]$content)
+  print(y[[index]]$content)
+  }
+compare_them(io_corpus_original, io_corpus)
 ```
