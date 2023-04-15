@@ -17,9 +17,10 @@ Dataset Creation - Commented out as instructed
 #   period = "year"
 # )
 # io_dat <- get_thread_content(io_links$url)
-# 
+# view(io_dat$threads)
+#
 # week12_tbl <- tibble(io_dat$threads, stringsAsFactors = FALSE) %>%
-#   select(c(upvotes, title))
+#   select(upvotes, title)
 # 
 # write_csv(week12_tbl, file = "../data/week12.csv")
 ```
