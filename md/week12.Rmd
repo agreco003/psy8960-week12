@@ -1,0 +1,35 @@
+---
+title: "week12.Rmd"
+author: "Anthony Greco"
+date: "2023-04-15"
+output: html_document
+---
+Dataset Creation - Commented out as instructed
+```{r Script Settings and Resources, include=TRUE} 
+#setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+#library(tidyverse)
+#library(RedditExtractoR)
+```
+
+```{r Data Import and Cleaning, include=TRUE}
+# io_links <- find_thread_urls(
+#   subreddit = "IOPsychology", 
+#   period = "year"
+# )
+# io_dat <- get_thread_content(io_links$url)
+# 
+# week12_tbl <- tibble(io_dat$threads, stringsAsFactors = FALSE) %>%
+#   select(c(upvotes, title))
+# 
+# write_csv(week12_tbl, file = "../data/week12.csv")
+```
+
+Natural Language Processing (NLP)
+```{r Script Settings and Resources, include=TRUE}
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+library(tidyverse)
+```
+
+```{r Data Import and Cleaning, include=TRUE}
+week12_tbl <- read_csv(file = "../data/week12.csv")
+```
