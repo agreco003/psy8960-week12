@@ -6,18 +6,19 @@ output: html_document
 ---
 Dataset Creation - Commented out as instructed
 ```{r Script Settings and Resources, include=TRUE} 
-#setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-#library(tidyverse)
-#library(RedditExtractoR)
+# setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+# library(tidyverse)
+# library(RedditExtractoR)
 ```
+
 ```{r Data Import and Cleaning, include=TRUE}
 # io_links <- find_thread_urls(
-#   subreddit = "IOPsychology", 
+#   subreddit = "IOPsychology",
 #   period = "year"
 # )
-# io_dat <- get_thread_content(io_links$url)
+# io_dat <- get_thread_content(io_links$url) #take a while to run but works!
 # view(io_dat$threads)
-#
+# 
 # week12_tbl <- tibble(io_dat$threads, stringsAsFactors = FALSE) %>%
 #   select(upvotes, title)
 # 
@@ -51,7 +52,7 @@ io_corpus <- io_corpus_original %>%
   tm_map(removeWords, c("io psychology", "iopsychology",  "riopsychology", "i o psychology", "i o", "io"
                          #"industrial organizational psychology", "industrial organisational psychology",
                          #"industrial organizational psych", "industrial organisational psych"
-                        )) %>% #removed variations of I/O psychology. Punctuation already removed previously so not needed here. amp removed because it trailed all & characters. Removing stopwords("en") resulted in empty cases, so removed per instructions to make pre-processing less aggressive
+                        )) %>% #removed variations of I/O psychology. Punctuation already removed previously so not needed here. amp removed because it trailed all & characters. Removing stopwords("en") resulted in empty cases, so removed per instructions to make pre-processing less aggressive. 
   tm_map(stripWhitespace) %>%
   lemmatize_words() #used a preset dictionary to homogenize word forms
 
@@ -69,8 +70,9 @@ io_dtm <- DocumentTermMatrix(io_corpus, control = list(tokenize = myTokenizer)) 
 
 #checks to see what is in the DTM
 # io_dtm$dimnames$Terms 
-# test_matrix <- tidy(io_dtm), count = rowSums(test_matrix), case_n = 1:729)
-# View(test_matrix) #check for 0 in terms
+# test_matrix <- as.matrix(io_dtm)
+# test_tbl <- tibble(count = rowSums(test_matrix), case_n = 1:729)
+# View(test_tbl) #check for 0 in terms
 io_slim_dtm <- removeSparseTerms(io_dtm, .994) #2.59 n/k ratio (n cases = 729, k variables = 281)
 ```
 
@@ -81,15 +83,17 @@ registerDoParallel(local_cluster) #Run across multiple cores! Faster.
 tuning <- FindTopicsNumber(io_dtm,
                            topics = seq(5, 15, by = 1), #originally set between 5 and 30 by 5, then 5 and 15 by 1, and then this final restricted range, looking for alignment across models
                            metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"), 
-                           verbose = T)
+                           verbose = T,
+                           control = list(seed = 50))
 FindTopicsNumber_plot(tuning) #look for convergence between, similar to a PCA
 stopCluster(local_cluster) 
 registerDoSEQ() #closes clusters
 
-#LDA with 7 topics, 8 would also be reasonable
+#LDA with 8 topics, 7 or 9 would also be reasonable
 lda_results <- LDA(io_dtm, 
-                  k = 7,
-                  method = "Gibbs")
+                  k = 8,
+                  method = "Gibbs",
+                  control = list(seed = 25))
 
 lda_betas <- tidy(lda_results, matrix="beta") %>% 
   group_by(topic) %>%
@@ -121,8 +125,7 @@ wordcloud(
 		min.freq=2,
 		colors=colorset)
 
-
-
+# Final Analysis: Topic predicting Upvotes
 final_tbl <- tibble(topics_tbl, upvotes = week12_tbl$upvotes) %>%
   mutate(topic = factor(topic, ordered = FALSE))
 final_tbl
