@@ -119,20 +119,36 @@ topics_tbl <- tidy(io_corpus_original) %>%
   mutate(original = text, probability = gamma) %>%
   select(doc_id, original, topic, probability)
 ``` 
+#Analysis Questions: 
+##1. Using the beta matrix alone, what topics would you conclude your final topic list maps onto? (e.g., topic 1, 2, 3…n each reflect what substantive topic construct? Use your best judgment.)
+Topic 1: Recommendations for entering the field (job, recommendation, help, undergrad, internship, interested, field, best)
+Topic 2: Content of IO psychology (people, performance, data, read, tests, jobs)
+Topic 3: Tasks of IO psychologists (career, development, assessment, learn)
+Topic 4: Settings of IO psychologists (company, phd, field, siop, conference, recent)
+Topic 5: Recurring discussions about topics (discussion, biweekly discussion, discussion reading, reading think)
+Topic 6: Advice about the working in the field (experience, advice, anyone, questions, find, looking)
+Topic 7: Time-bound questions (question, two-thousand, twenty, twenty-two)
+Topic 8: Materials for IO content (leadership, resources, consulting, use, theory, article, good, know)
+
+##2. Look at the original text of documents with the highest and lowest probabilities assigned to each document. Do your topic names derived from your interpretation of the beta matrix conceptually match with the content of the original posts? What kind of validity evidence does your answer to this question represent?
+The topic names derived are just okay -- there is substantial overlap between topic types. This suggests limited face validity of our topic names, first and foremost. Further, it demonstrates limited construct validity, particularly discriminant validity, if one expected distinct topics to emerge from these Reddit titles.   
 
 ``` {r Visualization, include = TRUE}
 wordcloud_data = as.matrix(io_dtm)
 wordCounts <- colSums(wordcloud_data)
 wordNames <- colnames(wordcloud_data)
+wordcloud_tbl <- (tibble(wordNames, wordCounts)) #combined to a new table, because word cloud was generating duplicate terms otherwise (i.e discussion reading appeared twice)
 colorset <- brewer.pal(7, "Dark2")
 wordcloud(
-	  words = wordNames,
-		freq = wordCounts,
+	  words = wordcloud_tbl$wordNames,
+		freq = wordcloud_tbl$wordCounts,
 		max.words = 50,
 		min.freq=2,
-		scale=c(2,.25), #made print scale smaller to fit in more windows. Would remove words if it didn't fit
+		scale=c(2,.3), #made print scale smaller to fit in more windows. Would remove words if it didn't fit
 		colors=colorset) 
 ```
+#Wordcloud interpretation:
+Across all documents, the term, "job" appears most frequently, and represents its own topic. Another topic includes a series of frequently occurring terms regarding recurring discussions (biweekly, discussions, think, reading). A third category appears to focus on the tasks required of an IO psychologist (psych, work, research). Yet another topic appears involved time-bound questions, with numbers occurring most often (thousand twenty, two-thousand). A fifth topic seems to center on the quality (i.e best) of contexts for training and working as an IO psychologist, with IO programs (school, graduate, degree, phd), and applied settings (management, company, internship, consulting) appearing together. The 6th category searches for opinions, as "think" appears as a frequently occurring term. Of course, this interpretation should be taken with caution, as wordclouds offer limited explanatory power. This one, in particular, does not represent all 8 categories identified previously, is limited to only the 50 most frequently occurring words in the dataset, skewing our interpretation. 
 
 ``` {r Publication, include = TRUE} 
 final_week12_tbl <- mutate(week12_tbl, doc_id = as.numeric(row.names(week12_tbl))) #added doc_id matching in multiple tibbles
@@ -146,3 +162,5 @@ final_tbl <- right_join(topics_tbl, final_week12_tbl, by = "doc_id") %>% #retain
 model <- lm(upvotes ~ topic, data = final_tbl)
 summary(model)
 ```
+#Final results interpretation:
+Unfortunately, it seems our categories are not predictive of upvotes received. Though our intercept is significant, the model results in a very, very small r-squared value (~.005), suggesting our categories do not explain much of the variance in upvotes. 
