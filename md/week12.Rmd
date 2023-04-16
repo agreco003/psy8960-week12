@@ -49,12 +49,13 @@ io_corpus <- io_corpus_original %>%
   tm_map(content_transformer(replace_number)) %>% #numbers replaced but retained in case they are meaningful
   tm_map(content_transformer(str_to_lower)) %>% #all lower case
   tm_map(removePunctuation) %>% #remove punctuation
-  tm_map(removeWords, c("io psychology", "iopsychology",  "riopsychology", "i o psychology", "i o", "io"
+  tm_map(removeWords, c(stopwords("en"), "io psychology", "iopsychology",  "riopsychology", "i o psychology", "i o", "io"
                          #"industrial organizational psychology", "industrial organisational psychology",
                          #"industrial organizational psych", "industrial organisational psych"
-                        )) %>% #removed variations of I/O psychology. Punctuation already removed previously so not needed here. amp removed because it trailed all & characters. Removing stopwords("en") resulted in empty cases, so removed per instructions to make pre-processing less aggressive. 
+                        )) %>% #removed variations of I/O psychology. Punctuation already removed previously so not needed here. removed because it trailed all & characters. 
   tm_map(stripWhitespace) %>%
-  lemmatize_words() #used a preset dictionary to homogenize word forms
+  lemmatize_words() %>% #used a preset dictionary to homogenize word forms 
+  tm_filter(FUN = function(x) { return(nchar(stripWhitespace(x$content)[[1]]) > 1) }) #filters 2 cases, comment out to find empty rows and rerun code chunk below
 
 compare_them <- function(x, y) { 
   index <- sample(1:length(x),1) #set an index
@@ -64,16 +65,20 @@ compare_them <- function(x, y) {
 compare_them(io_corpus_original, io_corpus) #run it as many times you like for checks
 
 myTokenizer <- function(x) { 
-  NGramTokenizer(x, Weka_control(min=1, max=2)) } #set max to 2 to enable bigrams (2-word sequence). bigrams would require a min and max of 2, but increasing min from 1 to 2 resulted in 7 empty cases that had a single word title (after IO psychology variants were removed). See cases: 15, 110, 156, 283, 339, 463, 477....for example, content(io_corpus_original[[15]]) in original corpus is only 1 word
+  NGramTokenizer(x, Weka_control(min=1, max=2)) } #set max to 2 to enable bigrams (2-word sequences). Bigrams include unigrams! 
 
 io_dtm <- DocumentTermMatrix(io_corpus, control = list(tokenize = myTokenizer)) #create a DTM
 
-#checks to see what is in the DTM
+# Check for empty values (0s)
 # io_dtm$dimnames$Terms 
 # test_matrix <- as.matrix(io_dtm)
-# test_tbl <- tibble(count = rowSums(test_matrix), case_n = 1:729)
-# View(test_tbl) #check for 0 in terms
-io_slim_dtm <- removeSparseTerms(io_dtm, .994) #2.59 n/k ratio (n cases = 729, k variables = 281)
+# test_tbl <- tibble(count = rowSums(test_matrix), tidy(io_corpus_original))
+# View(test_tbl) #check for 0 in terms - 2 missing
+# # content(io_corpus_original[[455]])
+# # content(io_corpus_original[[524]])
+
+io_slim_dtm <- removeSparseTerms(io_dtm, .997) #2.1 n/k ratio (n cases = 729, k variables = 346)
+
 ```
 
 ```{r Analysis, include=TRUE}
@@ -99,17 +104,18 @@ lda_betas <- tidy(lda_results, matrix="beta") %>%
   group_by(topic) %>%
   slice_max(n = 10, beta) %>%
   arrange(topic, -beta)
-lda_betas #probability that word(s) belong in a topic
+lda_betas # probability that word(s) belong in a topic
 
 lda_gammas <- tidy(lda_results, matrix="gamma") %>% 
   group_by(document) %>% 
   slice_max(n = 1, gamma, with_ties = FALSE) %>% #highest probability only, removes ties
   mutate(doc_id = as.numeric(document)) %>%
   arrange(doc_id)
-lda_gammas # probabilities of document containing the topic, need 729 for building tables later.
+lda_gammas # probabilities of document containing the topic, less than 729 will require creative table building
 
+# Create a table to interpret results
 topics_tbl <- tidy(io_corpus_original) %>%
-  left_join(lda_gammas, by = join_by(id == document)) %>%
+  right_join(lda_gammas, by = join_by(id == document)) %>%
   mutate(original = text, probability = gamma) %>%
   select(doc_id, original, topic, probability)
   
@@ -126,7 +132,8 @@ wordcloud(
 		colors=colorset)
 
 # Final Analysis: Topic predicting Upvotes
-final_tbl <- tibble(topics_tbl, upvotes = week12_tbl$upvotes) %>%
+final_week12_tbl <- mutate(week12_tbl, doc_id = as.numeric(row.names(week12_tbl))) #added rownames for doc_id matching in multiple tibbles
+final_tbl <- full_join(final_week12_tbl, topics_tbl, by = "doc_id") %>% #retains all case numbers, even missing values
   mutate(topic = factor(topic, ordered = FALSE))
 final_tbl
 model <- lm(upvotes ~ topic, data = final_tbl)
