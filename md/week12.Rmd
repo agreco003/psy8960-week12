@@ -155,7 +155,7 @@ final_week12_tbl <- mutate(week12_tbl, doc_id = as.numeric(row.names(week12_tbl)
 final_tbl <- right_join(topics_tbl, final_week12_tbl, by = "doc_id") %>% #retains all case numbers, even missing values. Check title vs original column to ensure it worked correctly
   select(-original) %>% #2 missing titles in topics tibble
   mutate(topic = factor(topic, ordered = FALSE)) %>%
-  rename(original = title) %>% #creating unordered factors for lm analysis later, renames titles column so all titles are present
+  rename(original = title) %>% #creating unordered factors for lm model later, renames titles column so all titles are present
   arrange(doc_id)
 
 # Does topic predict upvotes? Not really.        
@@ -163,4 +163,4 @@ model <- lm(upvotes ~ topic, data = final_tbl)
 summary(model)
 ```
 #Final results interpretation:
-Unfortunately, it seems our categories are not predictive of upvotes a post received. Though our intercept is significant, the model results in a very, very small r-squared value (~.005), suggesting our categories do not explain much of the variance in upvotes. 
+Unfortunately, it seems our categories are not predictive of how man upvotes a post receives. Though our intercept is significant, the model results in a very, very small r-squared value (~.005), suggesting our categories do not explain much of the variance in upvotes. 
