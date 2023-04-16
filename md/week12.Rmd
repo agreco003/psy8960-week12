@@ -158,9 +158,9 @@ final_tbl <- right_join(topics_tbl, final_week12_tbl, by = "doc_id") %>% #retain
   rename(original = title) %>% #creating unordered factors for lm analysis later, renames titles column so all titles are present
   arrange(doc_id)
 
-# Does topic predict upvotes?       
+# Does topic predict upvotes? Not really.        
 model <- lm(upvotes ~ topic, data = final_tbl)
 summary(model)
 ```
 #Final results interpretation:
-Unfortunately, it seems our categories are not predictive of upvotes received. Though our intercept is significant, the model results in a very, very small r-squared value (~.005), suggesting our categories do not explain much of the variance in upvotes. 
+Unfortunately, it seems our categories are not predictive of upvotes a post received. Though our intercept is significant, the model results in a very, very small r-squared value (~.005), suggesting our categories do not explain much of the variance in upvotes. 
