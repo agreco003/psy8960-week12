@@ -118,8 +118,9 @@ topics_tbl <- tidy(io_corpus_original) %>%
   right_join(lda_gammas, by = join_by(id == document)) %>%
   mutate(original = text, probability = gamma) %>%
   select(doc_id, original, topic, probability)
-  
-# Wordcloud
+``` 
+
+``` {r Visualization, include = TRUE}
 wordcloud_data = as.matrix(io_dtm)
 wordCounts <- colSums(wordcloud_data)
 wordNames <- colnames(wordcloud_data)
@@ -129,13 +130,19 @@ wordcloud(
 		freq = wordCounts,
 		max.words = 50,
 		min.freq=2,
-		colors=colorset)
+		scale=c(2,.25), #made print scale smaller to fit in more windows. Would remove words if it didn't fit
+		colors=colorset) 
+```
 
-# Final Analysis: Topic predicting Upvotes
-final_week12_tbl <- mutate(week12_tbl, doc_id = as.numeric(row.names(week12_tbl))) #added rownames for doc_id matching in multiple tibbles
-final_tbl <- full_join(final_week12_tbl, topics_tbl, by = "doc_id") %>% #retains all case numbers, even missing values
-  mutate(topic = factor(topic, ordered = FALSE))
-final_tbl
+``` {r Publication, include = TRUE} 
+final_week12_tbl <- mutate(week12_tbl, doc_id = as.numeric(row.names(week12_tbl))) #added doc_id matching in multiple tibbles
+final_tbl <- right_join(topics_tbl, final_week12_tbl, by = "doc_id") %>% #retains all case numbers, even missing values. Check title vs original column to ensure it worked correctly
+  select(-original) %>% #2 missing titles in topics tibble
+  mutate(topic = factor(topic, ordered = FALSE)) %>%
+  rename(original = title) %>% #creating unordered factors for lm analysis later, renames titles column so all titles are present
+  arrange(doc_id)
+
+# Does topic predict upvotes?       
 model <- lm(upvotes ~ topic, data = final_tbl)
 summary(model)
 ```
