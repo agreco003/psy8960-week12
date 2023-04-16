@@ -34,58 +34,98 @@ library(textstem)
 library(RWeka)
 library(topicmodels)
 library(tidytext)
+library(doParallel)
+library(ldatuning)
+library(wordcloud)
 ```
 
 ```{r Data Import and Cleaning, include=TRUE}
 week12_tbl <- read_csv(file = "../data/week12.csv")
 io_corpus_original <- VCorpus(VectorSource(week12_tbl$title))
 io_corpus <- io_corpus_original %>% 
-  tm_map(content_transformer(replace_abbreviation)) %>% #included steps below to homogenize word forms
-  tm_map(content_transformer(replace_contraction)) %>%
-  tm_map(content_transformer(str_to_lower)) %>%
-  tm_map(removePunctuation) %>%
-  tm_map(removeNumbers) %>% 
-  tm_map(removeWords, c(stopwords("en"),
-                        "io", "io psychology", "iopsychology",  "riopsychology", "io psych", "iopsych",
-                        "industrial organizational psychology", "industrial organisational psychology",
-                        "industrial organizational psych", "industrial organisational psych"
-  )) %>% #removed variations of I/O psychology. Punctuation already removed previously so not needed here
+  tm_map(content_transformer(replace_contraction)) %>% # contractions replaced
+  tm_map(content_transformer(replace_abbreviation)) %>% # abbreviations replaced
+  tm_map(content_transformer(replace_number)) %>% #numbers replaced but retained in case they are meaningful
+  tm_map(content_transformer(str_to_lower)) %>% #all lower case
+  tm_map(removePunctuation) %>% #remove punctuation
+  tm_map(removeWords, c("io psychology", "iopsychology",  "riopsychology", "i o psychology", "i o", "io"
+                         #"industrial organizational psychology", "industrial organisational psychology",
+                         #"industrial organizational psych", "industrial organisational psych"
+                        )) %>% #removed variations of I/O psychology. Punctuation already removed previously so not needed here. amp removed because it trailed all & characters. Removing stopwords("en") resulted in empty cases, so removed per instructions to make pre-processing less aggressive
   tm_map(stripWhitespace) %>%
-  lemmatize_words() %>% #used a dictionary to further homogenize word forms
-  tm_map(content_transformer(rm_white_lead)) #found the occasional leading whitespace in cleaned corpus examples annoying
+  lemmatize_words() #used a preset dictionary to homogenize word forms
 
 compare_them <- function(x, y) { 
-  index <- sample(1:length(x),1)
-  print(x[[index]]$content)
-  print(y[[index]]$content)
+  index <- sample(1:length(x),1) #set an index
+  print(x[[index]]$content) #print content of index case x
+  print(y[[index]]$content) #print content of index case y
   }
-compare_them(io_corpus_original, io_corpus)
+compare_them(io_corpus_original, io_corpus) #run it as many times you like for checks
 
 myTokenizer <- function(x) { 
-  NGramTokenizer(x, Weka_control(min=1, max=2)) } #set min and max to 2 to force bigrams (2-word sequence). Can set ot any limit but project called for 2.
+  NGramTokenizer(x, Weka_control(min=1, max=2)) } #set max to 2 to enable bigrams (2-word sequence). bigrams would require a min and max of 2, but increasing min from 1 to 2 resulted in 7 empty cases that had a single word title (after IO psychology variants were removed). See cases: 15, 110, 156, 283, 339, 463, 477....for example, content(io_corpus_original[[15]]) in original corpus is only 1 word
 
-io_dtm <- DocumentTermMatrix(io_corpus, control = list(tokenize = myTokenizer))
-io_dtm$dimnames$Terms
-test_matrix <- as.matrix(io_dtm)
-empty <- tibble(rowSums(test_matrix))
+io_dtm <- DocumentTermMatrix(io_corpus, control = list(tokenize = myTokenizer)) #create a DTM
 
-io_slim_dtm <- removeSparseTerms(io_dtm, .9987) #cannot get a 2:1 -> 3:1 ratio of docs to variables. Jumps from 729:2875 #.9986282579
-  
-io_slim_dtm$dimnames$Terms
-tokenCounts <- apply(io_slim_dtm, 1, sum)
-io_slim_dtm <- io_slim_dtm[tokenCounts > 0, ]
-as.matrix(io_slim_dtm)
+#checks to see what is in the DTM
+# io_dtm$dimnames$Terms 
+# test_matrix <- tidy(io_dtm), count = rowSums(test_matrix), case_n = 1:729)
+# View(test_matrix) #check for 0 in terms
+io_slim_dtm <- removeSparseTerms(io_dtm, .994) #2.59 n/k ratio (n cases = 729, k variables = 281)
 ```
 
 ```{r Analysis, include=TRUE}
-lda_result <- LDA(io_dtm, 
-                  k = 10,
+# Identifying number of topics
+local_cluster <- makeCluster(7)
+registerDoParallel(local_cluster) #Run across multiple cores! Faster.
+tuning <- FindTopicsNumber(io_dtm,
+                           topics = seq(5, 15, by = 1), #originally set between 5 and 30 by 5, then 5 and 15 by 1, and then this final restricted range, looking for alignment across models
+                           metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"), 
+                           verbose = T)
+FindTopicsNumber_plot(tuning) #look for convergence between, similar to a PCA
+stopCluster(local_cluster) 
+registerDoSEQ() #closes clusters
+
+#LDA with 7 topics, 8 would also be reasonable
+lda_results <- LDA(io_dtm, 
+                  k = 7,
                   method = "Gibbs")
 
-# doc_id = lda_result@documents 
-# original = week12_tbl$title
-# topic = 
-# probability = tidy(lda_result, matrix="beta")
+lda_betas <- tidy(lda_results, matrix="beta") %>% 
+  group_by(topic) %>%
+  slice_max(n = 10, beta) %>%
+  arrange(topic, -beta)
+lda_betas #probability that word(s) belong in a topic
 
-# topics_tbl <- tibble(doc_id, original, topic)
+lda_gammas <- tidy(lda_results, matrix="gamma") %>% 
+  group_by(document) %>% 
+  slice_max(n = 1, gamma, with_ties = FALSE) %>% #highest probability only, removes ties
+  mutate(doc_id = as.numeric(document)) %>%
+  arrange(doc_id)
+lda_gammas # probabilities of document containing the topic, need 729 for building tables later.
+
+topics_tbl <- tidy(io_corpus_original) %>%
+  left_join(lda_gammas, by = join_by(id == document)) %>%
+  mutate(original = text, probability = gamma) %>%
+  select(doc_id, original, topic, probability)
+  
+# Wordcloud
+wordcloud_data = as.matrix(io_dtm)
+wordCounts <- colSums(wordcloud_data)
+wordNames <- colnames(wordcloud_data)
+colorset <- brewer.pal(7, "Dark2")
+wordcloud(
+	  words = wordNames,
+		freq = wordCounts,
+		max.words = 50,
+		min.freq=2,
+		colors=colorset)
+
+
+
+final_tbl <- tibble(topics_tbl, upvotes = week12_tbl$upvotes) %>%
+  mutate(topic = factor(topic, ordered = FALSE))
+final_tbl
+model <- lm(upvotes ~ topic, data = final_tbl)
+summary(model)
 ```
