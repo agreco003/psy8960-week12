@@ -49,20 +49,19 @@ io_corpus <- io_corpus_original %>%
   tm_map(content_transformer(replace_number)) %>% #numbers replaced but retained in case they are meaningful
   tm_map(content_transformer(str_to_lower)) %>% #all lower case
   tm_map(removePunctuation) %>% #remove punctuation
-  tm_map(removeWords, c(stopwords("en"), "io psychology", "iopsychology",  "riopsychology", "i o psychology", "i o", "io"
-                         #"industrial organizational psychology", "industrial organisational psychology",
-                         #"industrial organizational psych", "industrial organisational psych"
-                        )) %>% #removed variations of I/O psychology. Punctuation already removed previously so not needed here. removed because it trailed all & characters. 
-  tm_map(stripWhitespace) %>%
+  tm_map(removeWords, c(stopwords("en"), "io psychology", "iopsychology",  "riopsychology", "i o psychology", "i o", "io")) %>% #removed variations of I/O psychology. Punctuation already removed previously so not needed here.
+  tm_map(stripWhitespace) %>% #reduced all whitespace to a single space whenever it occurs
   lemmatize_words() %>% #used a preset dictionary to homogenize word forms 
-  tm_filter(FUN = function(x) { return(nchar(stripWhitespace(x$content)[[1]]) > 1) }) #filters 2 cases, comment out to find empty rows and rerun code chunk below
+  tm_filter(FUN = function(x) {
+    return(nchar(stripWhitespace(x$content)[[1]]) > 1) 
+    }) #filters empty cases. Comment this FUN out to find empty rows and rerun "Check for empty values (0s)" code  to identify missing cases. 
 
 compare_them <- function(x, y) { 
   index <- sample(1:length(x),1) #set an index
   print(x[[index]]$content) #print content of index case x
   print(y[[index]]$content) #print content of index case y
   }
-compare_them(io_corpus_original, io_corpus) #run it as many times you like for checks
+compare_them(io_corpus_original, io_corpus) #run as many times you like for checks!
 
 myTokenizer <- function(x) { 
   NGramTokenizer(x, Weka_control(min=1, max=2)) } #set max to 2 to enable bigrams (2-word sequences). Bigrams include unigrams! 
@@ -74,19 +73,18 @@ io_dtm <- DocumentTermMatrix(io_corpus, control = list(tokenize = myTokenizer)) 
 # test_matrix <- as.matrix(io_dtm)
 # test_tbl <- tibble(count = rowSums(test_matrix), tidy(io_corpus_original))
 # View(test_tbl) #check for 0 in terms - 2 missing
-# # content(io_corpus_original[[455]])
-# # content(io_corpus_original[[524]])
+# content(io_corpus_original[[455]]) #first missing case
+# content(io_corpus_original[[524]]) #second missing case
 
-io_slim_dtm <- removeSparseTerms(io_dtm, .997) #2.1 n/k ratio (n cases = 729, k variables = 346)
-
+io_slim_dtm <- removeSparseTerms(io_dtm, .997) #2.1 n/k ratio (n cases = 727, k variables = 346)
 ```
 
 ```{r Analysis, include=TRUE}
 # Identifying number of topics
 local_cluster <- makeCluster(7)
-registerDoParallel(local_cluster) #Run across multiple cores! Faster.
+registerDoParallel(local_cluster) # Run across multiple cores! Faster.
 tuning <- FindTopicsNumber(io_dtm,
-                           topics = seq(5, 15, by = 1), #originally set between 5 and 30 by 5, then 5 and 15 by 1, and then this final restricted range, looking for alignment across models
+                           topics = seq(5, 15, by = 1), #originally set between 3 and 30 by 3, then this final restricted range, looking for alignment across models
                            metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"), 
                            verbose = T,
                            control = list(seed = 50))
@@ -94,7 +92,7 @@ FindTopicsNumber_plot(tuning) #look for convergence between, similar to a PCA
 stopCluster(local_cluster) 
 registerDoSEQ() #closes clusters
 
-#LDA with 8 topics, 7 or 9 would also be reasonable
+#LDA with 8 topics, 7 or 9 would also be reasonable based on results of previous plot
 lda_results <- LDA(io_dtm, 
                   k = 8,
                   method = "Gibbs",
@@ -102,13 +100,13 @@ lda_results <- LDA(io_dtm,
 
 lda_betas <- tidy(lda_results, matrix="beta") %>% 
   group_by(topic) %>%
-  slice_max(n = 10, beta) %>%
+  slice_max(n = 10, beta) %>% #top 10 words per topic
   arrange(topic, -beta)
 lda_betas # probability that word(s) belong in a topic
 
 lda_gammas <- tidy(lda_results, matrix="gamma") %>% 
   group_by(document) %>% 
-  slice_max(n = 1, gamma, with_ties = FALSE) %>% #highest probability only, removes ties
+  slice_max(n = 1, gamma, with_ties = FALSE) %>% #highest probability per document only, removes ties
   mutate(doc_id = as.numeric(document)) %>%
   arrange(doc_id)
 lda_gammas # probabilities of document containing the topic, less than 729 will require creative table building
@@ -152,10 +150,10 @@ Across all documents, the term, "job" appears most frequently, and represents it
 
 ``` {r Publication, include = TRUE} 
 final_week12_tbl <- mutate(week12_tbl, doc_id = as.numeric(row.names(week12_tbl))) #added doc_id matching in multiple tibbles
-final_tbl <- right_join(topics_tbl, final_week12_tbl, by = "doc_id") %>% #retains all case numbers, even missing values. Check title vs original column to ensure it worked correctly
-  select(-original) %>% #2 missing titles in topics tibble
-  mutate(topic = factor(topic, ordered = FALSE)) %>%
-  rename(original = title) %>% #creating unordered factors for lm model later, renames titles column so all titles are present
+final_tbl <- right_join(topics_tbl, final_week12_tbl, by = "doc_id") %>% #retains all case numbers, even missing values. Checked title vs original column to ensure it worked correctly
+  select(-original) %>% #2 missing titles in the topics tibble (original)...
+  rename(original = title) %>% #so replacing it with the complete set
+  mutate(topic = factor(topic, ordered = FALSE)) %>% #creating unordered factors for lm model later, renames titles column so all titles are present
   arrange(doc_id)
 
 # Does topic predict upvotes? Not really.        
@@ -163,4 +161,4 @@ model <- lm(upvotes ~ topic, data = final_tbl)
 summary(model)
 ```
 #Final results interpretation:
-Unfortunately, it seems our categories are not predictive of how man upvotes a post receives. Though our intercept is significant, the model results in a very, very small r-squared value (~.005), suggesting our categories do not explain much of the variance in upvotes. 
+Unfortunately, it seems our categories are not predictive of how man upvotes a post receives. Though our intercept is significant, the model itself is not (p = 0.8587) and has a very, very small r-squared value (~.005), suggesting our categories do not offer much explanation of the variance in upvotes. 
