@@ -23,9 +23,10 @@ Dataset Creation - Commented out as instructed
 #   select(upvotes, title)
 # 
 # write_csv(week12_tbl, file = "../data/week12.csv")
+# could also save this as a an RDS!!! 
 ```
 
-Natural Language Processing (NLP)
+Natural Language Processing Project (NLP)
 ```{r Script Settings and Resources, include=TRUE}
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 library(tidyverse)
@@ -40,6 +41,7 @@ library(ldatuning)
 library(wordcloud)
 ```
 
+# Data Import and Cleaning
 ```{r Data Import and Cleaning, include=TRUE}
 week12_tbl <- read_csv(file = "../data/week12.csv")
 io_corpus_original <- VCorpus(VectorSource(week12_tbl$title))
@@ -51,7 +53,7 @@ io_corpus <- io_corpus_original %>%
   tm_map(removePunctuation) %>% #remove punctuation
   tm_map(removeWords, c(stopwords("en"), "io psychology", "iopsychology",  "riopsychology", "i o psychology", "i o", "io")) %>% #removed variations of I/O psychology. Punctuation already removed previously so not needed here.
   tm_map(stripWhitespace) %>% #reduced all whitespace to a single space whenever it occurs
-  lemmatize_words() %>% #used a preset dictionary to homogenize word forms 
+  tm_map(content_transformer(lemmatize_words)) %>% #used a preset dictionary to homogenize word forms 
   tm_filter(FUN = function(x) {
     return(nchar(stripWhitespace(x$content)[[1]]) > 1) 
     }) #filters empty cases. Comment this FUN out to find empty rows and rerun "Check for empty values (0s)" code  to identify missing cases. 
@@ -61,7 +63,7 @@ compare_them <- function(x, y) {
   print(x[[index]]$content) #print content of index case x
   print(y[[index]]$content) #print content of index case y
   }
-compare_them(io_corpus_original, io_corpus) #run as many times you like for checks!
+compare_them(io_corpus_original, io_corpus) #run as many times you like for checks! Some may not match because of 2 missing elements with filters, comment that lemmatize words for check, or use cases 1:454 instead of 1:length(x)
 
 myTokenizer <- function(x) { 
   NGramTokenizer(x, Weka_control(min=1, max=2)) } #set max to 2 to enable bigrams (2-word sequences). Bigrams include unigrams! 
@@ -79,6 +81,7 @@ io_dtm <- DocumentTermMatrix(io_corpus, control = list(tokenize = myTokenizer)) 
 io_slim_dtm <- removeSparseTerms(io_dtm, .997) #2.1 n/k ratio (n cases = 727, k variables = 346)
 ```
 
+#Analysis
 ```{r Analysis, include=TRUE}
 # Identifying number of topics
 local_cluster <- makeCluster(7)
@@ -117,7 +120,6 @@ topics_tbl <- tidy(io_corpus_original) %>%
   mutate(original = text, probability = gamma) %>%
   select(doc_id, original, topic, probability)
 ``` 
-#Analysis Questions: 
 ##1. Using the beta matrix alone, what topics would you conclude your final topic list maps onto? (e.g., topic 1, 2, 3…n each reflect what substantive topic construct? Use your best judgment.)
 Topic 1: Recommendations for entering the field (job, recommendation, help, undergrad, internship, interested, field, best)
 Topic 2: Content of IO psychology (people, performance, data, read, tests, jobs)
@@ -131,6 +133,7 @@ Topic 8: Materials for IO content (leadership, resources, consulting, use, theor
 ##2. Look at the original text of documents with the highest and lowest probabilities assigned to each document. Do your topic names derived from your interpretation of the beta matrix conceptually match with the content of the original posts? What kind of validity evidence does your answer to this question represent?
 The topic names derived are just okay -- there is substantial overlap between topic types. This suggests limited face validity of our topic names, first and foremost. Further, it demonstrates limited construct validity, particularly discriminant validity, if one expected distinct topics to emerge from these Reddit titles.   
 
+#Wordcloud interpretation:
 ``` {r Visualization, include = TRUE}
 wordcloud_data = as.matrix(io_dtm)
 wordCounts <- colSums(wordcloud_data)
@@ -142,12 +145,12 @@ wordcloud(
 		freq = wordcloud_tbl$wordCounts,
 		max.words = 50,
 		min.freq=2,
-		scale=c(2,.3), #made print scale smaller to fit in more windows. Would remove words if it didn't fit
+		scale=c(2,1), #made print scale smaller to fit in more windows. Would remove words if it didn't fit
 		colors=colorset) 
 ```
-#Wordcloud interpretation:
 Across all documents, the term, "job" appears most frequently, and represents its own topic. Another topic includes a series of frequently occurring terms regarding recurring discussions (biweekly, discussions, think, reading). A third category appears to focus on the tasks required of an IO psychologist (psych, work, research). Yet another topic appears involved time-bound questions, with numbers occurring most often (thousand twenty, two-thousand). A fifth topic seems to center on the quality (i.e best) of contexts for training and working as an IO psychologist, with IO programs (school, graduate, degree, phd), and applied settings (management, company, internship, consulting) appearing together. The 6th category searches for opinions, as "think" appears as a frequently occurring term. Of course, this interpretation should be taken with caution, as wordclouds offer limited explanatory power. This one, in particular, does not represent all 8 categories identified previously, is limited to only the 50 most frequently occurring words in the dataset, skewing our interpretation. 
 
+#Final results:
 ``` {r Publication, include = TRUE} 
 final_week12_tbl <- mutate(week12_tbl, doc_id = as.numeric(row.names(week12_tbl))) #added doc_id matching in multiple tibbles
 final_tbl <- right_join(topics_tbl, final_week12_tbl, by = "doc_id") %>% #retains all case numbers, even missing values. Checked title vs original column to ensure it worked correctly
@@ -160,5 +163,4 @@ final_tbl <- right_join(topics_tbl, final_week12_tbl, by = "doc_id") %>% #retain
 model <- lm(upvotes ~ topic, data = final_tbl)
 summary(model)
 ```
-#Final results interpretation:
 Unfortunately, it seems our categories are not predictive of how man upvotes a post receives. Though our intercept is significant, the model itself is not (p = 0.8587) and has a very, very small r-squared value (~.005), suggesting our categories do not offer much explanation of the variance in upvotes. 
